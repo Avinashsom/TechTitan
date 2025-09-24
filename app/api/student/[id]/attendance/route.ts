@@ -6,16 +6,46 @@ interface Params {
   params: { id: string };
 }
 
-// GET /api/student/:id/attendance
+// GET /api/student/:id/attendance?classId=...&subject=...
 export async function GET(req: Request, { params }: Params) {
   try {
     await dbConnect();
-
     const { id } = params; // studentId
-    const records = await Attendance.find({ studentId: id }).sort({ date: -1 });
 
-    return NextResponse.json(records);
+    const url = new URL(req.url);
+    const classId = url.searchParams.get("classId");
+    const subject = url.searchParams.get("subject");
+
+    // Build the query
+    const query: any = { "records.studentId": id };
+    if (classId) query.classId = classId;
+    if (subject) query.subject = subject;
+
+    const attendanceEntries = await Attendance.find(query)
+      .populate("teacherId", "name email")
+      .sort({ date: -1 }); // sort by date descending
+
+    // Map to only include this student's record
+    const studentAttendance = attendanceEntries.map((entry: any) => {
+      const record = entry.records.find(
+        (r: any) => r.studentId.toString() === id
+      );
+      return {
+        subject: entry.subject,
+        status: record?.status || "N/A",
+        date: entry.date,
+        teacher: entry.teacherId?.name || "Unknown",
+        teacherEmail: entry.teacherId?.email || "",
+        classId: entry.classId,
+      };
+    });
+
+    return NextResponse.json(studentAttendance, { status: 200 });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("Error fetching student attendance:", err);
+    return NextResponse.json(
+      { error: err.message || "Failed to fetch attendance" },
+      { status: 500 }
+    );
   }
 }

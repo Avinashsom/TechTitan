@@ -1,25 +1,39 @@
 // app/api/attendance/route.ts
 import dbConnect from "@/lib/db";
 import Attendance from "@/models/Attendance";
+import { NextResponse } from "next/server";
+
+interface AttendanceRecord {
+  studentId: string;
+  status: "Present" | "Absent";
+}
 
 export async function POST(req: Request) {
   await dbConnect();
+
   try {
-    const { teacherId, classId, subject, date, records } = await req.json();
+    const { teacherId, classId, subject, date, records }: {
+      teacherId: string;
+      classId: string;
+      subject: string;
+      date: string;
+      records: AttendanceRecord[];
+    } = await req.json();
 
     // ✅ Validate required fields
     if (!teacherId || !classId || !subject || !date || !records) {
-      return new Response(JSON.stringify({ error: "Missing fields" }), {
-        status: 400,
-      });
+      return new Response(
+        JSON.stringify({ error: "Missing fields" }),
+        { status: 400 }
+      );
     }
 
     // ✅ Normalize date to yyyy-mm-dd
     const normalizedDate = new Date(date).toISOString().split("T")[0];
 
-    // ✅ Clean records (remove empty ones)
-    const cleanedRecords = (records || []).filter(
-      (r: any) => r.studentId && r.status
+    // ✅ Clean records (remove invalid)
+    const cleanedRecords = records.filter(
+      (r) => r.studentId && (r.status === "Present" || r.status === "Absent")
     );
 
     if (cleanedRecords.length === 0) {
@@ -29,7 +43,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Check if attendance already exists
+    // ✅ Check for duplicate attendance
     const existing = await Attendance.findOne({
       teacherId,
       classId,
@@ -58,6 +72,9 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify(newAttendance), { status: 201 });
   } catch (err: any) {
     console.error("Error saving attendance:", err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: err.message || "Failed to save attendance" }),
+      { status: 500 }
+    );
   }
 }
