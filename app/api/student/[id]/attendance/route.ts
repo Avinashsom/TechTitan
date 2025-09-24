@@ -1,28 +1,27 @@
-import { NextResponse } from "next/server";
-import dbConnect from "@/lib/db";
-import Attendance from "@/models/Attendance";
+import { NextRequest, NextResponse } from 'next/server';
+import dbConnect from '@/lib/db';
+import Attendance from '@/models/Attendance';
 
-interface Params {
-  params: { id: string };
-}
-
-// GET /api/student/:id/attendance?classId=...&subject=...
-export async function GET(req: Request, { params }: Params) {
+// GET /api/students/:id/attendance?classId=...&subject=...
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     await dbConnect();
-    const { id } = params; // studentId
+    const { id } = await params; // studentId
 
     const url = new URL(req.url);
-    const classId = url.searchParams.get("classId");
-    const subject = url.searchParams.get("subject");
+    const classId = url.searchParams.get('classId');
+    const subject = url.searchParams.get('subject');
 
     // Build the query
-    const query: any = { "records.studentId": id };
+    const query: any = { 'records.studentId': id };
     if (classId) query.classId = classId;
     if (subject) query.subject = subject;
 
     const attendanceEntries = await Attendance.find(query)
-      .populate("teacherId", "name email")
+      .populate('teacherId', 'name email')
       .sort({ date: -1 }); // sort by date descending
 
     // Map to only include this student's record
@@ -32,19 +31,19 @@ export async function GET(req: Request, { params }: Params) {
       );
       return {
         subject: entry.subject,
-        status: record?.status || "N/A",
+        status: record?.status || 'N/A',
         date: entry.date,
-        teacher: entry.teacherId?.name || "Unknown",
-        teacherEmail: entry.teacherId?.email || "",
+        teacher: entry.teacherId?.name || 'Unknown',
+        teacherEmail: entry.teacherId?.email || '',
         classId: entry.classId,
       };
     });
 
     return NextResponse.json(studentAttendance, { status: 200 });
   } catch (err: any) {
-    console.error("Error fetching student attendance:", err);
+    console.error('Error fetching student attendance:', err);
     return NextResponse.json(
-      { error: err.message || "Failed to fetch attendance" },
+      { error: err.message || 'Failed to fetch attendance' },
       { status: 500 }
     );
   }

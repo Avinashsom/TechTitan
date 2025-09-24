@@ -1,11 +1,11 @@
-import NextAuth from "next-auth";
+import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import Teacher from "@/models/Teacher";
 import Student from "@/models/Student";
 import dbConnect from "@/lib/db";
 import bcrypt from "bcryptjs";
 
-const handler = NextAuth({
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -17,10 +17,10 @@ const handler = NextAuth({
         await dbConnect();
 
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing email or password");
+          return null; // safer than throw
         }
 
-        // 🔹 Check Teacher
+        // Check Teacher
         let user = await Teacher.findOne({ email: credentials.email });
         if (user && (await bcrypt.compare(credentials.password, user.password))) {
           return {
@@ -31,7 +31,7 @@ const handler = NextAuth({
           };
         }
 
-        // 🔹 Check Student
+        // Check Student
         user = await Student.findOne({ email: credentials.email });
         if (user && (await bcrypt.compare(credentials.password, user.password))) {
           return {
@@ -42,8 +42,7 @@ const handler = NextAuth({
           };
         }
 
-        // ❌ No match
-        throw new Error("Invalid credentials");
+        return null; // credentials invalid
       },
     }),
   ],
@@ -51,25 +50,31 @@ const handler = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = (user as any).id;
-        token.role = (user as any).role;
+        token.id = user.id;
+        token.role = user.role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
+        session.user.id = token.id as string;
+        session.user.role = token.role as "teacher" | "student";
       }
       return session;
     },
   },
 
   pages: {
-    signIn: "/login", // student & teacher login page
+    signIn: "/login",
+  },
+
+  session: {
+    strategy: "jwt", // use JWT session
   },
 
   secret: process.env.NEXTAUTH_SECRET,
-});
+};
+
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
