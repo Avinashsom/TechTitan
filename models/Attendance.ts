@@ -1,101 +1,105 @@
-// models/Attendance.ts
+import mongoose, { Schema, model, models, Document, Types } from "mongoose";
 
-import mongoose, { Schema, model, models } from "mongoose";
-
-const AttendanceSchema = new Schema({
-  method: {
-    type: String,
-    enum: ["manual", "code"],
-    required: true,
-  },
-
-  teacherId: {
-    type: Schema.Types.ObjectId,
-    ref: "User",
-    required: function (this: any) {
-      return this.method === "manual";
-    },
-  },
-
-  classId: {
-    type: Schema.Types.ObjectId,
-    ref: "Class",
-    required: true,
-  },
-
-  subject: {
-    type: String,
-    required: function (this: mongoose.Document) {
-      return (this as any).method === "manual";
-    },
-  },
-
-  date: {
-    type: String,
-    required: true, // always required for both methods
-  },
-
-  studentId: {
-    type: Schema.Types.ObjectId,
-    ref: "Student",
-    required: function (this: mongoose.Document) {
-      return (this as any).method === "code";
-    },
-  },
-
-  status: {
-    type: String,
-    enum: ["Present", "Absent"],
-    required: function (this: mongoose.Document) {
-      return (this as any).method === "code";
-    },
-  },
-
-  // For manual attendance: array of records
+// 1. Define TypeScript interface for Attendance document
+export interface IAttendance extends Document {
+  method: "manual" | "code";
+  teacherId?: Types.ObjectId;
+  classId: Types.ObjectId;
+  subject?: string;
+  date: Date;
+  studentId?: Types.ObjectId;
+  status?: "Present" | "Absent";
   records: {
-    type: [
-      {
-        studentId: {
-          type: Schema.Types.ObjectId,
-          ref: "Student",
-          required: true,
-        },
-        status: {
-          type: String,
-          enum: ["Present", "Absent"],
-          required: true,
-        },
+    studentId: Types.ObjectId;
+    status: "Present" | "Absent";
+  }[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// 2. Create Schema
+const AttendanceSchema = new Schema<IAttendance>(
+  {
+    method: {
+      type: String,
+      enum: ["manual", "code"],
+      required: true,
+    },
+
+    teacherId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: function (this: IAttendance) {
+        return this.method === "manual";
       },
-    ],
-    validate: {
-      validator: function (arr: any[]) {
-        // Only validate if method is 'manual'
-        return (this as any).method !== "manual" || arr.length > 0;
+    },
+
+    classId: {
+      type: Schema.Types.ObjectId,
+      ref: "Class",
+      required: true,
+    },
+
+    subject: {
+      type: String,
+      required: function (this: IAttendance) {
+        return this.method === "manual";
       },
-      message: "At least one attendance record is required for manual method.",
+    },
+
+    date: {
+      type: Date,
+      required: true,
+    },
+
+    studentId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: function (this: IAttendance) {
+        return this.method === "code";
+      },
+    },
+
+    status: {
+      type: String,
+      enum: ["Present", "Absent"],
+      default: "Present",
+      required: function (this: IAttendance) {
+        return this.method === "code";
+      },
+    },
+
+    records: {
+      type: [
+        {
+          studentId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          status: { type: String, enum: ["Present", "Absent"], required: true },
+        },
+      ],
+      default: [],
+      validate: {
+        validator: function (this: IAttendance, arr: any[]) {
+          return this.method !== "manual" || arr.length > 0;
+        },
+        message: "At least one record is required for manual attendance",
+      },
     },
   },
-});
+  { timestamps: true }
+);
 
-// ✅ Prevent duplicate manual attendance
+// 3. Indexes to prevent duplicates
 AttendanceSchema.index(
   { teacherId: 1, classId: 1, subject: 1, date: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { method: "manual" }, // only apply to manual
-  }
+  { unique: true, partialFilterExpression: { method: "manual" } }
 );
 
-// ✅ Prevent duplicate code-based entries per student/class/date
 AttendanceSchema.index(
   { studentId: 1, classId: 1, date: 1 },
-  {
-    unique: true,
-    partialFilterExpression: { method: "code" }, // only apply to code-based
-  }
+  { unique: true, partialFilterExpression: { method: "code" } }
 );
 
-const Attendance =
-  models.Attendance || model("Attendance", AttendanceSchema);
+// 4. Create model
+const Attendance = models.Attendance || model<IAttendance>("Attendance", AttendanceSchema);
 
 export default Attendance;
